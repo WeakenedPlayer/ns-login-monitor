@@ -10,7 +10,7 @@
     "nexe": "node nexe.build.js",
     "release": "npm run build && npm run nexe",
     "nexe-clean": "node_modules/.bin/nexe --clean",
-    "test": "node-dev dist/boot.js"
+    "test": "node-dev dist/main.js"
   },
   "keywords": [],
   "dependencies": {
