@@ -1,32 +1,93 @@
 import { Observable } from 'rxjs';
 import * as Discord from 'discord.js';
-import { DISCORD_TOKEN, CENSUS_API_KEY } from './const';
+import { DISCORD_TOKEN, CENSUS_API_KEY, id2name } from './const';
+import { client, connection } from 'websocket';
 
-let client = new Discord.Client();
-client.on('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
-});
-client.login(  DISCORD_TOKEN ).then( ()=>{
-    console.log( 'login succeeded...');
-}, ( err ) => {
-    console.log( 'login failed...');
-    console.log( err );
+// constant
+const url = 'wss://push.planetside2.com/streaming?environment=ps2&service-id=s:' + CENSUS_API_KEY;
+
+let idList:string[] = [];
+for( let id in id2name ) {
+    idList.push( id );
+}
+console.log( idList );
+
+const command = {
+    "service":"event",
+    "action":"subscribe",
+    "worlds":["1"], // connery
+    //"characters": idList,
+    "eventNames":["PlayerLogin"]
+};
+
+// clients
+let ws = new client();
+let discordClient = new Discord.Client();
+let channel: Discord.TextChannel;
+let ownerId = '';
+
+// これはひどい!!!
+function getChannel() {
+    return channel;
+}
+
+// setting
+ws.on( 'connect', ( wsConnection: connection ) => {
+    console.log( 'connected' );
+    
+    wsConnection.on( 'close', () => {
+        console.log( 'closed' );
+    } );
+
+    wsConnection.on( 'error', ( err ) => {
+        console.log( err );
+    } );
+
+    wsConnection.on( 'message', ( message: any ) => {
+        // console.log( message );
+        
+        if( message.type === 'utf8' ) {
+            let data: any = JSON.parse( message.utf8Data ); 
+            
+            if( data.type === 'serviceMessage' ) {
+                let info: any = data.payload;
+                let characterId: string = info.character_id;
+                let name: string = id2name[ characterId ];
+                let ch = getChannel();                
+                if( ch && name ) {
+                    ch.send( 'アウトフィット参加希望の'+ name + 'さんがログインしました。');
+                }
+            }
+        }
+    } );
+    
+    wsConnection.send( JSON.stringify( command ) );
 } );
 
+ws.on( 'connectFailed', ( evt ) => {
+    console.log( evt );
+} ); 
 
-client.on( 'message', ( msg: Discord.Message ) => {
-    if (msg.content === 'ping') {
-      msg.reply('Pong!');
+// setting
+discordClient.on('ready', () => {
+    console.log( 'login' );
+    discordClient.fetchApplication()
+    .then( apps => {
+        ownerId = apps.owner.id;
+    } );
+    ws.connect( url );
+} );
+
+discordClient.on( 'message', ( message ) => {
+    if( message.author.id !== discordClient.user.id ) {
+        if( ownerId === message.author.id ) {
+            if( message.content === 'start' ) {
+                channel = message.channel as Discord.TextChannel;
+                console.log( 'start...channel id: ' + channel.id );
+            }
+        }
     }
 } );
 
-//const Discord = require('discord.js');
-//const client = new Discord.Client();
-//
-//client.on('ready', () => {
-//  console.log(`Logged in as ${client.user.tag}!`);
-//});
-//
-
-//
-//client.login('MzM4MzU4Nzk4MDY0NDE4ODE4.DbYCsQ.5RuWmhP8OhvOtoKmhaxqnWJ-_1k');
+// start
+discordClient.login( DISCORD_TOKEN );
